@@ -1,0 +1,20 @@
+export const chartOfAccounts = {
+  assets: ["Cash on Hand", "Kuwait Bank", "India Bank"],
+  liabilities: ["Approved Commitments Payable", "Assistance Payable", "Other Payables"],
+  income: ["Member Subscription", "Ramadan Collection", "General Collection", "Bank Interest", "Chitty Income", "Other Income"],
+  expenses: [
+    "Food Kit",
+    "Medical Aid",
+    "Medical Emergency",
+    "Widow Pension",
+    "Self Employment",
+    "Education",
+    "Debt Clearance",
+    "House Maintenance",
+    "Dialysis Assistance",
+    "Ramadan Kit",
+    "Eid Kit",
+    "Payment Disbursement",
+    "Admin Expenses",
+  ],
+} as const;
