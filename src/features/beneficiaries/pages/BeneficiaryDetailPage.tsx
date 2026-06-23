@@ -21,9 +21,14 @@ import {
   type BeneficiaryPaymentDue,
   type BeneficiaryPaymentLog,
 } from "@/features/beneficiaries/beneficiaryDueStore";
-import { defaultPaymentCategoryNames, normalizePaymentCategory } from "@/features/paymentCategories/paymentCategoryDefaults";
+import {
+  accountingStorageKey,
+  getExpenseAccountCategoryOptions,
+  normalizeExpenseAccountCategory,
+  readAccountingAccounts,
+} from "@/features/accounting/accountingAccounts";
 import { useAppSelector } from "@/hooks/redux";
-import { beneficiarySelectors, paymentCategorySelectors } from "@/store/selectors";
+import { beneficiarySelectors } from "@/store/selectors";
 import { formatCurrency } from "@/utils/currency";
 
 const beneficiaryDueSchema = z
@@ -160,7 +165,7 @@ export default function BeneficiaryDetailPage() {
   const navigate = useNavigate();
   const { notify } = useToast();
   const beneficiaries = useAppSelector(beneficiarySelectors.selectAll);
-  const paymentCategories = useAppSelector(paymentCategorySelectors.selectAll);
+  const [accountHeads, setAccountHeads] = useState(() => readAccountingAccounts());
   const beneficiary = beneficiaries.find((item) => item.id === beneficiaryId);
   const [isCreatingDue, setIsCreatingDue] = useState(false);
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
@@ -182,6 +187,14 @@ export default function BeneficiaryDetailPage() {
     return () => window.removeEventListener("storage", syncDues);
   }, [beneficiaryId]);
 
+  useEffect(() => {
+    const syncAccounts = (event: StorageEvent) => {
+      if (event.key === accountingStorageKey) setAccountHeads(readAccountingAccounts());
+    };
+    window.addEventListener("storage", syncAccounts);
+    return () => window.removeEventListener("storage", syncAccounts);
+  }, []);
+
   const totals = useMemo(
     () => ({
       approved: dues.reduce((total, due) => total + due.amount, 0),
@@ -198,11 +211,7 @@ export default function BeneficiaryDetailPage() {
       }),
     [dues],
   );
-  const activeCategoryOptions = useMemo(
-    () => paymentCategories.filter((item) => item.status === "Active").map((item) => item.name),
-    [paymentCategories],
-  );
-  const categoryOptions = activeCategoryOptions.length ? activeCategoryOptions : defaultPaymentCategoryNames;
+  const categoryOptions = useMemo(() => getExpenseAccountCategoryOptions(accountHeads), [accountHeads]);
 
   const handleCreateDue = (values: BeneficiaryDueFormValues) => {
     if (!beneficiaryId) return;
@@ -454,7 +463,7 @@ export default function BeneficiaryDetailPage() {
       {isCreatingDue && (
         <Modal title="Create payment due" onClose={() => setIsCreatingDue(false)}>
           <BeneficiaryDueForm
-            defaultCategory={normalizePaymentCategory(beneficiary.category, categoryOptions) || categoryOptions[0] || ""}
+            defaultCategory={normalizeExpenseAccountCategory(beneficiary.category, categoryOptions) || categoryOptions[0] || ""}
             categoryOptions={categoryOptions}
             onSubmit={handleCreateDue}
             onCancel={() => setIsCreatingDue(false)}

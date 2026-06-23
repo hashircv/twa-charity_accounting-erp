@@ -122,12 +122,6 @@ export interface Beneficiary extends BaseEntity {
   status: "Pending" | "Approved" | "Active" | "Closed";
 }
 
-export interface PaymentCategory extends BaseEntity {
-  name: string;
-  description: string;
-  status: "Active" | "Inactive";
-}
-
 export interface Commitment extends BaseEntity {
   beneficiaryId: string;
   category: string;

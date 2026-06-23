@@ -12,15 +12,18 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toaster";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { bankFeature, cashAccountFeature, paymentFeature } from "@/store/features";
-import { bankSelectors, beneficiarySelectors, cashAccountSelectors, paymentCategorySelectors, paymentSelectors } from "@/store/selectors";
+import { bankSelectors, beneficiarySelectors, cashAccountSelectors, paymentSelectors } from "@/store/selectors";
 import type { BaseEntity, Payment } from "@/types/domain";
 import { formatCurrency } from "@/utils/currency";
 import { PaymentForm, type PaymentFormValues } from "@/features/payments/components/PaymentForm";
-import { defaultPaymentCategoryNames, normalizePaymentCategory } from "@/features/paymentCategories/paymentCategoryDefaults";
 import { markBeneficiaryDuePaid } from "@/features/beneficiaries/beneficiaryDueStore";
 import {
+  accountingStorageKey,
   getDefaultAccountId,
+  getExpenseAccountCategoryOptions,
   getPaymentExpenseAccount,
+  normalizeExpenseAccountCategory,
+  readAccountingAccounts,
   removeJournalEntriesForSource,
   replaceJournalEntriesForSource,
   type AccountingJournalEntry,
@@ -45,13 +48,13 @@ export default function PaymentsPage() {
   const navigate = useNavigate();
   const { notify } = useToast();
   const payments = useAppSelector(paymentSelectors.selectAll);
-  const paymentCategories = useAppSelector(paymentCategorySelectors.selectAll);
   const beneficiaries = useAppSelector(beneficiarySelectors.selectAll);
   const cashAccounts = useAppSelector(cashAccountSelectors.selectAll);
   const bankAccounts = useAppSelector(bankSelectors.selectAll);
   const [status, setStatus] = useState("");
   const [method, setMethod] = useState("");
   const [currency, setCurrency] = useState("");
+  const [accountHeads, setAccountHeads] = useState(() => readAccountingAccounts());
 
   // Modal state
   const [isCreating, setIsCreating] = useState(false);
@@ -68,6 +71,14 @@ export default function PaymentsPage() {
     setIsCreating(true);
     navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, location.state, navigate]);
+
+  useEffect(() => {
+    const syncAccounts = (event: StorageEvent) => {
+      if (event.key === accountingStorageKey) setAccountHeads(readAccountingAccounts());
+    };
+    window.addEventListener("storage", syncAccounts);
+    return () => window.removeEventListener("storage", syncAccounts);
+  }, []);
 
   const filteredPayments = useMemo(
     () =>
@@ -97,11 +108,17 @@ export default function PaymentsPage() {
       })),
     [beneficiaries],
   );
-  const activePaymentCategoryOptions = useMemo(
-    () => paymentCategories.filter((category) => category.status === "Active").map((category) => category.name),
-    [paymentCategories],
-  );
-  const categoryOptions = activePaymentCategoryOptions.length ? activePaymentCategoryOptions : defaultPaymentCategoryNames;
+  const categoryOptions = useMemo(() => getExpenseAccountCategoryOptions(accountHeads), [accountHeads]);
+
+  const getNextVoucherNumber = () => {
+    const nextNumber =
+      payments.reduce((largest, payment) => {
+        const match = payment.voucherNumber.match(/^VCH-(\d+)$/i);
+        return match ? Math.max(largest, Number(match[1])) : largest;
+      }, 0) + 1;
+
+    return `VCH-${String(nextNumber).padStart(6, "0")}`;
+  };
 
   const getBeneficiaryName = (beneficiaryId: string) =>
     beneficiaryOptions.find((beneficiary) => beneficiary.id === beneficiaryId)?.name ??
@@ -287,11 +304,11 @@ export default function PaymentsPage() {
   ];
 
   const createDraftDefaults = (draft: BeneficiaryDuePaymentDraft): PaymentFormValues => ({
-    voucherNumber: `VCH-${String(payments.length + 1).padStart(6, "0")}`,
+    voucherNumber: getNextVoucherNumber(),
     date: new Date().toISOString().slice(0, 10),
     beneficiaryId: draft.beneficiaryId,
     beneficiaryName: draft.beneficiaryName,
-    category: normalizePaymentCategory(draft.category, categoryOptions) || "Education Assistance",
+    category: normalizeExpenseAccountCategory(draft.category, categoryOptions) || categoryOptions[0] || "",
     amount: {
       originalAmount: draft.amount,
       currency: "INR",
@@ -303,6 +320,22 @@ export default function PaymentsPage() {
     paidBy: "TWA Administrator",
     accountId: cashAccountOptions[0]?.id ?? "",
     narration: `${draft.supportType} ${draft.category} payment for ${draft.beneficiaryName} from ${new Date(draft.fromDate).toLocaleDateString()} to ${new Date(draft.toDate ?? draft.fromDate).toLocaleDateString()}`,
+    status: "Paid",
+  });
+
+  const createPaymentDefaults = (): Partial<PaymentFormValues> => ({
+    voucherNumber: getNextVoucherNumber(),
+    date: new Date().toISOString().slice(0, 10),
+    amount: {
+      originalAmount: 0,
+      currency: "INR",
+      exchangeRate: 1,
+      convertedAmount: 0,
+    },
+    method: "Cash",
+    accountId: cashAccountOptions[0]?.id ?? "",
+    approvedBy: "TWA Administrator",
+    paidBy: "TWA Administrator",
     status: "Paid",
   });
 
@@ -351,7 +384,7 @@ export default function PaymentsPage() {
           }}
         >
           <PaymentForm
-            defaultValues={paymentDraft ? createDraftDefaults(paymentDraft) : undefined}
+            defaultValues={paymentDraft ? createDraftDefaults(paymentDraft) : createPaymentDefaults()}
             beneficiaries={beneficiaryOptions}
             categoryOptions={categoryOptions}
             cashAccounts={cashAccountOptions}
@@ -375,7 +408,7 @@ export default function PaymentsPage() {
               date: editingPayment.date,
               beneficiaryId: getBeneficiaryCode(editingPayment.beneficiaryId),
               beneficiaryName: editingPayment.beneficiaryName || getBeneficiaryName(editingPayment.beneficiaryId),
-              category: normalizePaymentCategory(editingPayment.category, categoryOptions),
+              category: normalizeExpenseAccountCategory(editingPayment.category, categoryOptions),
               amount: editingPayment.amount,
               method: editingPayment.method,
               accountId: editingPayment.accountId || (editingPayment.method === "Bank" ? bankAccountOptions[0]?.id : cashAccountOptions[0]?.id) || "",

@@ -83,7 +83,13 @@ export function readAccountingAccounts() {
 
   try {
     const parsed = JSON.parse(stored) as AccountingAccount[];
-    return Array.isArray(parsed) && parsed.length ? parsed : fallback;
+    if (!Array.isArray(parsed) || !parsed.length) return fallback;
+
+    const savedIds = new Set(parsed.map((account) => account.id));
+    return [
+      ...parsed,
+      ...fallback.filter((account) => !savedIds.has(account.id)),
+    ];
   } catch {
     return fallback;
   }
@@ -97,33 +103,36 @@ export function getDefaultAccountId(group: AccountGroup, accountName: string) {
   return `${group}-${accountName.toLowerCase().replace(/\s+/g, "-")}`;
 }
 
+export function getExpenseAccountCategoryOptions(accounts = readAccountingAccounts()) {
+  return [...new Set(
+    accounts
+      .filter((account) => account.group === "expenses" && account.status === "Active")
+      .map((account) => account.accountName),
+  )];
+}
+
+export function normalizeExpenseAccountCategory(category: string, options = getExpenseAccountCategoryOptions()) {
+  return options.includes(category) ? category : options.find((option) => option.includes(category) || category.includes(option)) ?? "";
+}
+
+export function getIncomeAccountCategoryOptions(accounts = readAccountingAccounts()) {
+  return [...new Set(
+    accounts
+      .filter((account) => account.group === "income" && account.status === "Active")
+      .map((account) => account.accountName),
+  )];
+}
+
+export function normalizeIncomeAccountCategory(category: string, options = getIncomeAccountCategoryOptions()) {
+  return options.includes(category) ? category : options.find((option) => option.includes(category) || category.includes(option)) ?? "";
+}
+
 export function getReceiptIncomeAccount(category: string) {
-  const normalized = category.toLowerCase();
-  if (normalized.includes("membership") || normalized.includes("subscription")) return "Member Subscription";
-  if (normalized.includes("ramadan")) return "Ramadan Collection";
-  if (normalized.includes("general") || normalized.includes("charity") || normalized.includes("coin")) return "General Collection";
-  if (normalized.includes("interest")) return "Bank Interest";
-  if (normalized.includes("chitty")) return "Chitty Income";
-  return "Other Income";
+  return category || "Other Income";
 }
 
 export function getPaymentExpenseAccount(category: string) {
-  const normalized = category.toLowerCase();
-  const matches: Array<[string, string]> = [
-    ["food", "Food Kit"],
-    ["medical emergency", "Medical Emergency"],
-    ["medical", "Medical Aid"],
-    ["widow", "Widow Pension"],
-    ["employment", "Self Employment"],
-    ["education", "Education"],
-    ["debt", "Debt Clearance"],
-    ["house", "House Maintenance"],
-    ["dialysis", "Dialysis Assistance"],
-    ["ramadan", "Ramadan Kit"],
-    ["eid", "Eid Kit"],
-    ["admin", "Admin Expenses"],
-  ];
-  return matches.find(([needle]) => normalized.includes(needle))?.[1] ?? "Payment Disbursement";
+  return category || "Payment Disbursement";
 }
 
 export function readAccountingJournal() {

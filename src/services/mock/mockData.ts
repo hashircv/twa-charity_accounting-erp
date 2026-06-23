@@ -15,11 +15,10 @@ import type {
   ExchangeRate,
   Member,
   Payment,
-  PaymentCategory,
   User,
   UserRole,
 } from "@/types/domain";
-import { defaultPaymentCategoryNames } from "@/features/paymentCategories/paymentCategoryDefaults";
+import { chartOfAccounts } from "@/utils/chartOfAccounts";
 import { convertCurrency } from "@/utils/currency";
 import { rolePermissions } from "@/constants/permissions";
 
@@ -209,7 +208,7 @@ export const payments: Payment[] = Array.from({ length: 15 }, (_, index) => {
     date,
     beneficiaryId: beneficiary.beneficiaryId,
     beneficiaryName: beneficiary.name,
-    category: faker.helpers.arrayElement(defaultPaymentCategoryNames),
+    category: faker.helpers.arrayElement(chartOfAccounts.expenses),
     amount: convertCurrency(
       faker.number.int({ min: currency === "KWD" ? 10 : 1000, max: currency === "KWD" ? 600 : 90000 }),
       currency,
@@ -225,14 +224,6 @@ export const payments: Payment[] = Array.from({ length: 15 }, (_, index) => {
     status: faker.helpers.arrayElement(["Pending", "Approved", "Paid"] as const),
   };
 });
-
-export const paymentCategories: PaymentCategory[] = defaultPaymentCategoryNames.map((name, index) => ({
-  ...stamp(index + 500),
-  id: `payment-category-${index + 1}`,
-  name,
-  description: `${name} payment category`,
-  status: "Active",
-}));
 
 export const commitments: Commitment[] = Array.from({ length: 10 }, (_, index) => {
   const beneficiary = faker.helpers.arrayElement(beneficiaries);

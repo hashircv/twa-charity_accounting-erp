@@ -54,13 +54,6 @@ export const appRoutes: AppRoute[] = [
     element: lazy(() => import("@/features/beneficiaries/pages/BeneficiariesPage")),
   },
   {
-    path: "/paymentCategories",
-    label: "Payment Categories",
-    module: "PaymentCategories",
-    requiredRoles: ["Administrator"],
-    element: lazy(() => import("@/features/paymentCategories/pages/PaymentCategoriesPage")),
-  },
-  {
     path: "/beneficiaries/:beneficiaryId",
     label: "Beneficiary Details",
     module: "Beneficiaries",

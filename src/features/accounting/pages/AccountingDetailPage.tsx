@@ -78,7 +78,7 @@ export default function AccountingDetailPage() {
   const account: DetailAccount | undefined = cashAccount
     ? {
         id: `cash__${cashAccount.id}`,
-        code: "1000-CASH",
+        code: cashAccount.phoneNumber,
         group: "assets",
         accountName: `${cashAccount.userName} Cash`,
         normalBalance: "Debit",
@@ -99,7 +99,7 @@ export default function AccountingDetailPage() {
     : bankAccount
       ? {
           id: `bank__${bankAccount.id}`,
-          code: "1000-BANK",
+          code: bankAccount.accountNumber,
           group: "assets",
           accountName: bankAccount.accountName,
           normalBalance: "Debit",

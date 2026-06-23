@@ -1,4 +1,4 @@
-export type MemberDueCategory = "Subscription" | "Sponsorship";
+export type MemberDueCategory = string;
 export type MemberDueType = "Monthly" | "Quarterly" | "Yearly" | "One-time";
 
 export interface MemberSubscriptionPlan {

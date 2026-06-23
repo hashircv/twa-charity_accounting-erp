@@ -15,6 +15,12 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SummaryCards } from "@/components/ui/SummaryCards";
 import { useToast } from "@/components/ui/Toaster";
 import {
+  accountingStorageKey,
+  getIncomeAccountCategoryOptions,
+  normalizeIncomeAccountCategory,
+  readAccountingAccounts,
+} from "@/features/accounting/accountingAccounts";
+import {
   createMemberSubscriptionPlan,
   getMemberDues,
   getMemberPaidLogs,
@@ -28,7 +34,7 @@ import { formatCurrency } from "@/utils/currency";
 
 const subscriptionSchema = z
   .object({
-    category: z.enum(["Subscription", "Sponsorship"], { required_error: "Select category" }),
+    category: z.string().min(1, "Select category"),
     subscriptionType: z.enum(["Monthly", "Quarterly", "Yearly", "One-time"], { required_error: "Select subscription type" }),
     fromDate: z.string().min(1, "From date is required"),
     toDate: z.string().optional(),
@@ -64,9 +70,11 @@ function DetailSection({ title, fields }: { title: string; fields: DetailField[]
 }
 
 function SubscriptionForm({
+  categoryOptions,
   onSubmit,
   onCancel,
 }: {
+  categoryOptions: string[];
   onSubmit: (values: SubscriptionFormValues) => void;
   onCancel: () => void;
 }) {
@@ -77,7 +85,7 @@ function SubscriptionForm({
   } = useForm<SubscriptionFormValues>({
     resolver: zodResolver(subscriptionSchema),
     defaultValues: {
-      category: "Subscription",
+      category: categoryOptions[0] ?? "",
       subscriptionType: "Monthly",
       fromDate: new Date().toISOString().slice(0, 10),
       toDate: "",
@@ -93,10 +101,7 @@ function SubscriptionForm({
           label="Category"
           placeholder="Select category"
           error={errors.category?.message}
-          options={[
-            { value: "Subscription", label: "Subscription" },
-            { value: "Sponsorship", label: "Sponsorship" },
-          ]}
+          options={categoryOptions.map((category) => ({ value: category, label: category }))}
           {...register("category")}
         />
         <SelectField
@@ -162,6 +167,7 @@ export default function MemberDetailPage() {
   const member = members.find((item) => item.id === memberId);
   const [isCreatingDue, setIsCreatingDue] = useState(false);
   const [showReceiptHistory, setShowReceiptHistory] = useState(false);
+  const [accountHeads, setAccountHeads] = useState(() => readAccountingAccounts());
   const [dues, setDues] = useState<MemberSubscriptionDue[]>(() => (memberId ? getMemberDues(memberId) : []));
   const [paidLogs, setPaidLogs] = useState<MemberPaidLog[]>(() => (memberId ? getMemberPaidLogs(memberId) : []));
 
@@ -183,6 +189,14 @@ export default function MemberDetailPage() {
     return () => window.removeEventListener("storage", syncMemberDues);
   }, [memberId]);
 
+  useEffect(() => {
+    const syncAccounts = (event: StorageEvent) => {
+      if (event.key === accountingStorageKey) setAccountHeads(readAccountingAccounts());
+    };
+    window.addEventListener("storage", syncAccounts);
+    return () => window.removeEventListener("storage", syncAccounts);
+  }, []);
+
   const totals = useMemo(
     () => ({
       billed: dues.reduce((total, due) => total + due.amount, 0),
@@ -199,6 +213,7 @@ export default function MemberDetailPage() {
       }),
     [dues],
   );
+  const categoryOptions = useMemo(() => getIncomeAccountCategoryOptions(accountHeads), [accountHeads]);
 
   const handleCreateDue = (values: SubscriptionFormValues) => {
     if (!memberId) return;
@@ -221,7 +236,7 @@ export default function MemberDetailPage() {
           memberName: member?.name ?? "Member",
           memberId: member?.memberId ?? "",
           memberContact: member?.contactNumber ?? "",
-          category: due.category,
+          category: normalizeIncomeAccountCategory(due.category, categoryOptions) || due.category,
           subscriptionType: due.subscriptionType,
           fromDate: due.fromDate,
           toDate: due.toDate,
@@ -426,7 +441,7 @@ export default function MemberDetailPage() {
 
       {isCreatingDue && (
         <Modal title="Create subscription due" onClose={() => setIsCreatingDue(false)}>
-          <SubscriptionForm onSubmit={handleCreateDue} onCancel={() => setIsCreatingDue(false)} />
+          <SubscriptionForm categoryOptions={categoryOptions} onSubmit={handleCreateDue} onCancel={() => setIsCreatingDue(false)} />
         </Modal>
       )}
 

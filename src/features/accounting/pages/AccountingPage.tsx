@@ -24,7 +24,7 @@ import {
   type AccountGroup,
   buildPaymentJournalEntries,
   buildReceiptJournalEntries,
-  createInitialAccountingAccounts,
+  getDefaultAccountId,
   getJournalBalance,
   groupCodePrefix,
   groupLabels,
@@ -35,7 +35,8 @@ import {
   writeAccountingAccounts,
   type AccountingJournalEntry,
 } from "@/features/accounting/accountingAccounts";
-import { bankSelectors, cashAccountSelectors, collectionSelectors, paymentSelectors } from "@/store/selectors";
+import { readUserAccounts, userAccountsStorageKey, type UserAccount } from "@/features/users/userAccountsStore";
+import { bankSelectors, cashAccountSelectors, collectionSelectors, memberSelectors, paymentSelectors } from "@/store/selectors";
 import { formatCurrency } from "@/utils/currency";
 
 type AccountingRow = AccountingAccount & {
@@ -65,11 +66,13 @@ function getAccountCode(group: AccountGroup, codeSuffix: number) {
 }
 
 function AccountForm({
+  assetAccountNameOptions,
   defaultValues,
   onSubmit,
   onCancel,
   submitLabel,
 }: {
+  assetAccountNameOptions?: string[];
   defaultValues?: Partial<AccountFormValues>;
   onSubmit: (values: AccountFormValues) => void;
   onCancel: () => void;
@@ -100,6 +103,14 @@ function AccountForm({
     setValue("normalBalance", normalBalanceByGroup[group], { shouldValidate: true });
   }, [group, setValue]);
 
+  const accountNameOptions = useMemo(() => {
+    const options = assetAccountNameOptions ?? [];
+    if (defaultValues?.accountName && !options.includes(defaultValues.accountName)) {
+      return [defaultValues.accountName, ...options];
+    }
+    return options;
+  }, [assetAccountNameOptions, defaultValues?.accountName]);
+
   return (
     <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -113,7 +124,7 @@ function AccountForm({
         />
         <NumberField
           id="codeSuffix"
-          label={`Account Code (${groupCodePrefix[group]}-${String(Number(codeSuffix) || 1).padStart(3, "0")})`}
+          label={`Account Code / Account Number (${groupCodePrefix[group]}-${String(Number(codeSuffix) || 1).padStart(3, "0")})`}
           min="1"
           step="1"
           error={errors.codeSuffix?.message}
@@ -121,13 +132,33 @@ function AccountForm({
         />
       </div>
 
-      <TextField
-        id="accountName"
-        label="Account Name"
-        placeholder="e.g. Education Assistance"
-        error={errors.accountName?.message}
-        {...register("accountName")}
-      />
+      {group === "assets" ? (
+        <>
+          <TextField
+            id="accountName"
+            label="Account Name"
+            placeholder="Enter bank name or select cash user"
+            error={errors.accountName?.message}
+            list="asset-account-name-options"
+            {...register("accountName")}
+          />
+          {accountNameOptions.length > 0 && (
+            <datalist id="asset-account-name-options">
+              {accountNameOptions.map((name) => (
+                <option value={name} key={name} />
+              ))}
+            </datalist>
+          )}
+        </>
+      ) : (
+        <TextField
+          id="accountName"
+          label="Account Name"
+          placeholder="e.g. Education Assistance"
+          error={errors.accountName?.message}
+          {...register("accountName")}
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <SelectField
@@ -183,8 +214,10 @@ export default function AccountingPage() {
   const [journalEntries, setJournalEntries] = useState<AccountingJournalEntry[]>(() => readAccountingJournal());
   const cashAccounts = useAppSelector(cashAccountSelectors.selectAll);
   const bankAccounts = useAppSelector(bankSelectors.selectAll);
+  const members = useAppSelector(memberSelectors.selectAll);
   const collections = useAppSelector(collectionSelectors.selectAll);
   const payments = useAppSelector(paymentSelectors.selectAll);
+  const [userAccounts, setUserAccounts] = useState<UserAccount[]>(() => readUserAccounts());
   const [isCreating, setIsCreating] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountingAccount | null>(null);
   const [deletingAccount, setDeletingAccount] = useState<AccountingAccount | null>(null);
@@ -205,6 +238,15 @@ export default function AccountingPage() {
     return () => window.removeEventListener("storage", syncJournal);
   }, []);
 
+  useEffect(() => {
+    const syncUsers = (event: StorageEvent) => {
+      if (event.key === userAccountsStorageKey) setUserAccounts(readUserAccounts());
+    };
+
+    window.addEventListener("storage", syncUsers);
+    return () => window.removeEventListener("storage", syncUsers);
+  }, []);
+
   const effectiveJournalEntries = useMemo(
     () =>
       mergeAccountingJournal(
@@ -217,11 +259,22 @@ export default function AccountingPage() {
     [bankAccounts, cashAccounts, collections, journalEntries, payments],
   );
 
+  const assetAccountNameOptions = useMemo(
+    () => [
+      ...new Set(
+        userAccounts
+          .map((account) => members.find((member) => member.id === account.memberId)?.name)
+          .filter((name): name is string => Boolean(name)),
+      ),
+    ],
+    [members, userAccounts],
+  );
+
   const accountingRows = useMemo<AccountingRow[]>(
     () => [
-      ...cashAccounts.map((account, index) => ({
+      ...cashAccounts.map((account) => ({
         id: `cash__${account.id}`,
-        code: `1000-C${String(index + 1).padStart(3, "0")}`,
+        code: account.phoneNumber,
         group: "assets" as const,
         accountName: `${account.userName} Cash`,
         normalBalance: "Debit" as const,
@@ -234,9 +287,9 @@ export default function AccountingPage() {
         sourceId: account.id,
         managedExternally: true,
       })),
-      ...bankAccounts.map((bank, index) => ({
+      ...bankAccounts.map((bank) => ({
         id: `bank__${bank.id}`,
-        code: `1000-B${String(index + 1).padStart(3, "0")}`,
+        code: bank.accountNumber,
         group: "assets" as const,
         accountName: bank.accountName,
         normalBalance: "Debit" as const,
@@ -274,15 +327,20 @@ export default function AccountingPage() {
 
   const createAccount = (values: AccountFormValues) => {
     const code = getAccountCode(values.group, values.codeSuffix);
+    const accountId = getDefaultAccountId(values.group, values.accountName);
     if (accounts.some((account) => account.code === code)) {
       notify({ tone: "error", title: "Duplicate account code", description: `${code} already exists.` });
+      return;
+    }
+    if (accounts.some((account) => account.id === accountId)) {
+      notify({ tone: "error", title: "Duplicate account name", description: `${values.accountName} already exists in ${groupLabels[values.group]}.` });
       return;
     }
 
     const now = new Date().toISOString();
     setAccounts((current) => [
       {
-        id: crypto.randomUUID(),
+        id: accountId,
         code,
         group: values.group,
         accountName: values.accountName,
@@ -331,12 +389,6 @@ export default function AccountingPage() {
     setAccounts((current) => current.filter((account) => account.id !== deletingAccount.id));
     notify({ tone: "success", title: "Account deleted", description: `${deletingAccount.accountName} was removed.` });
     setDeletingAccount(null);
-  };
-
-  const resetDefaults = () => {
-    const defaults = createInitialAccountingAccounts();
-    setAccounts(defaults);
-    notify({ tone: "info", title: "Accounts reset", description: "Default chart of accounts was restored." });
   };
 
   const columns: ColumnDef<AccountingRow>[] = [
@@ -432,9 +484,6 @@ export default function AccountingPage() {
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <Button className="bg-slate-700 hover:bg-slate-800" onClick={resetDefaults} type="button">
-          Reset defaults
-        </Button>
         <Button onClick={() => setIsCreating(true)} type="button">
           <CopyPlus className="h-4 w-4" />
           Create account
@@ -443,13 +492,19 @@ export default function AccountingPage() {
 
       {isCreating && (
         <Modal title="Create account" onClose={() => setIsCreating(false)}>
-          <AccountForm onSubmit={createAccount} onCancel={() => setIsCreating(false)} submitLabel="Create" />
+          <AccountForm
+            assetAccountNameOptions={assetAccountNameOptions}
+            onSubmit={createAccount}
+            onCancel={() => setIsCreating(false)}
+            submitLabel="Create"
+          />
         </Modal>
       )}
 
       {editingAccount && (
         <Modal title={`Edit ${editingAccount.accountName}`} onClose={() => setEditingAccount(null)}>
           <AccountForm
+            assetAccountNameOptions={assetAccountNameOptions}
             defaultValues={{
               codeSuffix: getCodeSuffix(editingAccount.code),
               group: editingAccount.group,

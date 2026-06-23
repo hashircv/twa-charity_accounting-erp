@@ -1,6 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { CopyPlus, Eye, Pencil, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { PermissionGuard } from "@/app/guards/PermissionGuard";
 import { SelectFilter } from "@/components/filters/SelectFilter";
@@ -12,9 +12,9 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toaster";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { beneficiaryFeature } from "@/store/features";
-import { beneficiarySelectors, paymentCategorySelectors } from "@/store/selectors";
+import { beneficiarySelectors } from "@/store/selectors";
 import type { BaseEntity, Beneficiary } from "@/types/domain";
-import { defaultPaymentCategoryNames } from "@/features/paymentCategories/paymentCategoryDefaults";
+import { accountingStorageKey, getExpenseAccountCategoryOptions, readAccountingAccounts } from "@/features/accounting/accountingAccounts";
 import {
   BeneficiaryForm,
   type BeneficiaryFormValues,
@@ -37,7 +37,7 @@ export default function BeneficiariesPage() {
   const navigate = useNavigate();
   const { notify } = useToast();
   const beneficiaries = useAppSelector(beneficiarySelectors.selectAll);
-  const paymentCategories = useAppSelector(paymentCategorySelectors.selectAll);
+  const [accountHeads, setAccountHeads] = useState(() => readAccountingAccounts());
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
   const [income, setIncome] = useState("");
@@ -58,11 +58,15 @@ export default function BeneficiariesPage() {
     [beneficiaries, category, income, status],
   );
   const nextBeneficiaryId = useMemo(() => getNextBeneficiaryId(beneficiaries), [beneficiaries]);
-  const activeCategoryOptions = useMemo(
-    () => paymentCategories.filter((item) => item.status === "Active").map((item) => item.name),
-    [paymentCategories],
-  );
-  const categoryOptions = activeCategoryOptions.length ? activeCategoryOptions : defaultPaymentCategoryNames;
+  const categoryOptions = useMemo(() => getExpenseAccountCategoryOptions(accountHeads), [accountHeads]);
+
+  useEffect(() => {
+    const syncAccounts = (event: StorageEvent) => {
+      if (event.key === accountingStorageKey) setAccountHeads(readAccountingAccounts());
+    };
+    window.addEventListener("storage", syncAccounts);
+    return () => window.removeEventListener("storage", syncAccounts);
+  }, []);
 
   const handleCreate = (values: BeneficiaryFormValues) => {
     const beneficiaryId = getNextBeneficiaryId(beneficiaries);

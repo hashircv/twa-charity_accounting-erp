@@ -13,15 +13,19 @@ import { Modal } from "@/components/modals/Modal";
 import { PermissionGuard } from "@/app/guards/PermissionGuard";
 import { bankFeature, cashAccountFeature, collectionFeature } from "@/store/features";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
-import { bankSelectors, cashAccountSelectors, collectionSelectors } from "@/store/selectors";
+import { bankSelectors, cashAccountSelectors, collectionSelectors, memberSelectors } from "@/store/selectors";
 import type { Collection, Currency } from "@/types/domain";
 import { formatCurrency } from "@/utils/currency";
 import { convertCurrency } from "@/utils/currency";
 import { exchangeRates } from "@/services/mock/mockData";
 import type { CollectionFormValues } from "@/features/collections/schemas/collectionSchema";
 import {
+  accountingStorageKey,
   getDefaultAccountId,
+  getIncomeAccountCategoryOptions,
   getReceiptIncomeAccount,
+  normalizeIncomeAccountCategory,
+  readAccountingAccounts,
   removeJournalEntriesForSource,
   replaceJournalEntriesForSource,
   type AccountingJournalEntry,
@@ -48,6 +52,7 @@ export default function CollectionsPage() {
   const location = useLocation();
   const { notify } = useToast();
   const collections = useAppSelector(collectionSelectors.selectAll);
+  const members = useAppSelector(memberSelectors.selectAll);
   const cashAccounts = useAppSelector(cashAccountSelectors.selectAll);
   const bankAccounts = useAppSelector(bankSelectors.selectAll);
   const [editing, setEditing] = useState<Collection | undefined>();
@@ -58,6 +63,7 @@ export default function CollectionsPage() {
   const [depositStatus, setDepositStatus] = useState("");
   const [receiptDraft, setReceiptDraft] = useState<MemberDueReceiptState["memberDueReceipt"]>();
   const [paymentLog, setPaymentLog] = useState<MemberDueReceiptState["memberDueReceipt"]>();
+  const [accountHeads, setAccountHeads] = useState(() => readAccountingAccounts());
   const now = new Date().toISOString();
   const routedReceipt = (location.state as MemberDueReceiptState | null)?.memberDueReceipt;
 
@@ -78,6 +84,14 @@ export default function CollectionsPage() {
     setEditing(undefined);
   }, [routedReceipt]);
 
+  useEffect(() => {
+    const syncAccounts = (event: StorageEvent) => {
+      if (event.key === accountingStorageKey) setAccountHeads(readAccountingAccounts());
+    };
+    window.addEventListener("storage", syncAccounts);
+    return () => window.removeEventListener("storage", syncAccounts);
+  }, []);
+
   const cashAccountOptions = useMemo(
     () => cashAccounts.map((account) => ({ id: account.id, label: `${account.userName} / ${account.phoneNumber}` })),
     [cashAccounts],
@@ -86,6 +100,7 @@ export default function CollectionsPage() {
     () => bankAccounts.map((account) => ({ id: account.id, label: `${account.accountName} / ${account.accountNumber}` })),
     [bankAccounts],
   );
+  const categoryOptions = useMemo(() => getIncomeAccountCategoryOptions(accountHeads), [accountHeads]);
 
   const getSelectedAccountName = (values: CollectionFormValues) => {
     const options = values.accountType === "Bank" ? bankAccountOptions : cashAccountOptions;
@@ -382,7 +397,7 @@ export default function CollectionsPage() {
                         donorContact: receiptDraft.memberContact,
                         amount: receiptDraft.amount,
                         currency: "INR" as Currency,
-                        category: receiptDraft.category === "Subscription" ? "Monthly Subscription" : "General Charity Collection",
+                        category: normalizeIncomeAccountCategory(receiptDraft.category, categoryOptions) || categoryOptions[0] || "",
                         collectedBy: "TWA Administrator",
                         method: "Cash",
                         depositStatus: "With Treasurer",
@@ -394,6 +409,12 @@ export default function CollectionsPage() {
               }
               cashAccounts={cashAccountOptions}
               bankAccounts={bankAccountOptions}
+              categoryOptions={categoryOptions}
+              members={members.map((member) => ({
+                name: member.name,
+                contactNumber: member.contactNumber,
+                memberId: member.memberId,
+              }))}
             />
             {editing && (
               <Button

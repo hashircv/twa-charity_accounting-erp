@@ -40,7 +40,6 @@ const icons: Record<string, React.ElementType> = {
   Commitments: BookOpenCheck,
   Contributions: Coins,
   Payments: Banknote,
-  PaymentCategories: ClipboardList,
   Accounting: Building2,
   AccountHeads: Building2,
   Accounts: Building2,
@@ -49,7 +48,7 @@ const icons: Record<string, React.ElementType> = {
   Settings: Settings,
 };
 
-const masterModules = new Set(["Members", "Users", "Beneficiaries", "PaymentCategories"]);
+const masterModules = new Set(["Members", "Users", "Beneficiaries"]);
 const accountModules = new Set(["Banks", "Accounting", "AccountHeads", "Accounts"]);
 const reportModules = new Set(["Commitments", "Assistance", "Contributions"]);
 

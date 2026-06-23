@@ -1,34 +1,28 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { NumberField, SelectField, TextField } from "@/components/forms/FormField";
 import { Button } from "@/components/ui/Button";
 import { collectionSchema, type CollectionFormValues } from "@/features/collections/schemas/collectionSchema";
-
-const categories = [
-  "Membership Fee",
-  "Monthly Subscription",
-  "Ramadan Collection",
-  "General Charity Collection",
-  "Bank Interest Income",
-  "Chitty Income",
-  "Coin Box",
-  "Other Income",
-];
 
 export function CollectionForm({
   onSubmit,
   submitLabel = "Create receipt",
   defaultValues,
   receiptNumber,
+  categoryOptions,
   cashAccounts,
   bankAccounts,
+  members,
 }: {
   onSubmit: (values: CollectionFormValues) => void;
   submitLabel?: string;
   defaultValues?: Partial<CollectionFormValues>;
   receiptNumber: string;
+  categoryOptions: string[];
   cashAccounts: { id: string; label: string }[];
   bankAccounts: { id: string; label: string }[];
+  members?: { name: string; contactNumber: string; memberId: string }[];
 }) {
   const { register, handleSubmit, formState, reset, watch, setValue } = useForm<CollectionFormValues>({
     resolver: zodResolver(collectionSchema),
@@ -36,7 +30,7 @@ export function CollectionForm({
       date: new Date().toISOString().slice(0, 10),
       currency: "KWD",
       method: "Cash",
-      category: "Membership Fee",
+      category: categoryOptions[0] ?? "",
       collectedBy: "TWA Administrator",
       depositStatus: "With Treasurer",
       accountType: "Cash",
@@ -45,7 +39,19 @@ export function CollectionForm({
     },
   });
   const accountType = watch("accountType");
+  const donorName = watch("donorName");
   const accountOptions = accountType === "Bank" ? bankAccounts : cashAccounts;
+  const [isDonorOpen, setIsDonorOpen] = useState(false);
+  const donorNameField = register("donorName");
+  const donorSuggestions = (members ?? []).filter((member) =>
+    donorName?.trim() ? member.name.toLowerCase().includes(donorName.trim().toLowerCase()) : true,
+  );
+
+  useEffect(() => {
+    const selectedMember = members?.find((member) => member.name.toLowerCase() === donorName?.trim().toLowerCase());
+    if (!selectedMember) return;
+    setValue("donorContact", selectedMember.contactNumber, { shouldValidate: true, shouldDirty: true });
+  }, [donorName, members, setValue]);
 
   return (
     <form
@@ -56,7 +62,7 @@ export function CollectionForm({
           date: new Date().toISOString().slice(0, 10),
           currency: "KWD",
           method: "Cash",
-          category: "Membership Fee",
+          category: categoryOptions[0] ?? "",
           collectedBy: "TWA Administrator",
           depositStatus: "With Treasurer",
           accountType: "Cash",
@@ -66,7 +72,50 @@ export function CollectionForm({
     >
       <TextField id="receiptNumber" label="Receipt Number" value={receiptNumber} readOnly />
       <TextField id="date" label="Date" type="date" error={formState.errors.date?.message} {...register("date")} />
-      <TextField id="donorName" label="Donor Name" placeholder="Donor name" error={formState.errors.donorName?.message} {...register("donorName")} />
+      <div className="relative space-y-1">
+        <label htmlFor="donorName" className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+          Donor Name
+        </label>
+        <input
+          id="donorName"
+          className={`w-full rounded border border-slate-200 bg-white px-3 py-2 text-base outline-none transition focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 dark:border-slate-800 dark:bg-slate-900 dark:focus:border-emerald-500 dark:focus:ring-emerald-500 sm:text-sm ${
+            formState.errors.donorName ? "border-red-400 focus:border-red-500 focus:ring-red-500" : ""
+          }`}
+          placeholder="Type donor or select member"
+          autoComplete="off"
+          {...donorNameField}
+          onFocus={() => setIsDonorOpen(true)}
+          onBlur={(event) => {
+            donorNameField.onBlur(event);
+            window.setTimeout(() => setIsDonorOpen(false), 120);
+          }}
+          onChange={(event) => {
+            donorNameField.onChange(event);
+            setIsDonorOpen(true);
+          }}
+        />
+        {formState.errors.donorName?.message && <p className="text-xs text-red-600">{formState.errors.donorName.message}</p>}
+        {isDonorOpen && donorSuggestions.length > 0 && (
+          <div className="absolute left-0 right-0 top-full z-40 mt-1 max-h-52 overflow-y-auto rounded border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-950">
+            {donorSuggestions.map((member) => (
+              <button
+                className="block w-full px-3 py-2 text-left text-base text-slate-800 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900 sm:text-sm"
+                key={`${member.memberId}-${member.name}`}
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  setValue("donorName", member.name, { shouldValidate: true, shouldDirty: true });
+                  setValue("donorContact", member.contactNumber, { shouldValidate: true, shouldDirty: true });
+                  setIsDonorOpen(false);
+                }}
+              >
+                <span className="block font-medium">{member.name}</span>
+                <span className="block break-words text-xs text-slate-500">{member.memberId} / {member.contactNumber}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <TextField id="donorContact" label="Donor Contact" placeholder="Donor contact" error={formState.errors.donorContact?.message} {...register("donorContact")} />
       <SelectField
         id="currency"
@@ -82,8 +131,9 @@ export function CollectionForm({
       <SelectField
         id="category"
         label="Collection Category"
-        options={categories.map((category) => ({ value: category, label: category }))}
+        options={categoryOptions.map((category) => ({ value: category, label: category }))}
         error={formState.errors.category?.message}
+        searchable
         {...register("category")}
       />
       <TextField id="collectedBy" label="Collected By" placeholder="Collector name" error={formState.errors.collectedBy?.message} {...register("collectedBy")} />
@@ -145,7 +195,7 @@ export function CollectionForm({
         />
       </div>
       <div className="md:col-span-2">
-        <Button type="submit">{submitLabel}</Button>
+        <Button className="w-full sm:w-auto" type="submit">{submitLabel}</Button>
       </div>
     </form>
   );

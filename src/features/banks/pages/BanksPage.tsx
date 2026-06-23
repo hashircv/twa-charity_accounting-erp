@@ -1,6 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { CopyPlus, Landmark, Pencil, Trash2, WalletCards } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PermissionGuard } from "@/app/guards/PermissionGuard";
 import { SelectFilter } from "@/components/filters/SelectFilter";
 import { ConfirmationDialog } from "@/components/modals/ConfirmationDialog";
@@ -13,6 +13,7 @@ import { SummaryCards } from "@/components/ui/SummaryCards";
 import { useToast } from "@/components/ui/Toaster";
 import { BankAccountForm, type BankAccountFormValues } from "@/features/banks/components/BankAccountForm";
 import { CashAccountForm, type CashAccountFormValues } from "@/features/banks/components/CashAccountForm";
+import { accountingStorageKey, readAccountingAccounts } from "@/features/accounting/accountingAccounts";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { bankFeature, cashAccountFeature } from "@/store/features";
 import { bankSelectors, cashAccountSelectors } from "@/store/selectors";
@@ -27,6 +28,7 @@ type AccountMasterRow =
       type: "Cash Account";
       currency: "-";
       reconciliation: "-";
+      cashAccount: CashAccount;
       bank?: never;
     }
   | {
@@ -38,6 +40,7 @@ type AccountMasterRow =
       currency: BankAccount["currency"];
       reconciliation: BankAccount["reconciliationStatus"];
       bank: BankAccount;
+      cashAccount?: never;
     };
 
 export default function BanksPage() {
@@ -45,6 +48,7 @@ export default function BanksPage() {
   const { notify } = useToast();
   const banks = useAppSelector(bankSelectors.selectAll);
   const cashAccounts = useAppSelector(cashAccountSelectors.selectAll);
+  const [accountHeads, setAccountHeads] = useState(() => readAccountingAccounts());
   const [type, setType] = useState("");
   const [currency, setCurrency] = useState("");
   const [reconciliation, setReconciliation] = useState("");
@@ -53,6 +57,16 @@ export default function BanksPage() {
   const [isCreatingCashAccount, setIsCreatingCashAccount] = useState(false);
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
   const [deletingBank, setDeletingBank] = useState<BankAccount | null>(null);
+  const [editingCashAccount, setEditingCashAccount] = useState<CashAccount | null>(null);
+  const [deletingCashAccount, setDeletingCashAccount] = useState<CashAccount | null>(null);
+
+  useEffect(() => {
+    const syncAccounts = (event: StorageEvent) => {
+      if (event.key === accountingStorageKey) setAccountHeads(readAccountingAccounts());
+    };
+    window.addEventListener("storage", syncAccounts);
+    return () => window.removeEventListener("storage", syncAccounts);
+  }, []);
 
   const filteredBanks = useMemo(
     () =>
@@ -63,6 +77,14 @@ export default function BanksPage() {
           (!reconciliation || bank.reconciliationStatus === reconciliation),
       ),
     [banks, currency, reconciliation, type],
+  );
+  const assetAccountHeads = useMemo(
+    () => accountHeads.filter((account) => account.group === "assets" && account.status === "Active"),
+    [accountHeads],
+  );
+  const assetHeadOptions = useMemo(
+    () => assetAccountHeads.map((account) => ({ id: account.id, name: account.accountName, code: account.code })),
+    [assetAccountHeads],
   );
 
   const accountMasterRows = useMemo<AccountMasterRow[]>(
@@ -75,6 +97,7 @@ export default function BanksPage() {
         type: "Cash Account" as const,
         currency: "-" as const,
         reconciliation: "-" as const,
+        cashAccount: account,
       })),
       ...filteredBanks.map((bank) => ({
         id: bank.id,
@@ -91,29 +114,47 @@ export default function BanksPage() {
   );
 
   const handleCreateBank = (values: BankAccountFormValues) => {
-    void dispatch(bankFeature.createOne(values as Omit<BankAccount, keyof BaseEntity>) as never);
+    const { assetHeadId: _assetHeadId, ...payload } = values;
+    void dispatch(bankFeature.createOne(payload as Omit<BankAccount, keyof BaseEntity>) as never);
     notify({ tone: "success", title: "Bank account created", description: `${values.accountName} was added to the account master.` });
     setIsCreatingBank(false);
   };
 
   const handleCreateCashAccount = (values: CashAccountFormValues) => {
-    void dispatch(cashAccountFeature.createOne({ ...values, currentBalance: 0 } as Omit<CashAccount, keyof BaseEntity>) as never);
+    const { assetHeadId: _assetHeadId, ...payload } = values;
+    void dispatch(cashAccountFeature.createOne({ ...payload, currentBalance: 0 } as Omit<CashAccount, keyof BaseEntity>) as never);
     notify({ tone: "success", title: "Cash account created", description: `${values.userName} was added to the account master.` });
     setIsCreatingCashAccount(false);
   };
 
   const handleEdit = (values: BankAccountFormValues) => {
     if (!editingBank) return;
-    void dispatch(bankFeature.updateOne({ id: editingBank.id, patch: values as Partial<BankAccount> }) as never);
+    const { assetHeadId: _assetHeadId, ...payload } = values;
+    void dispatch(bankFeature.updateOne({ id: editingBank.id, patch: payload as Partial<BankAccount> }) as never);
     notify({ tone: "success", title: "Bank account updated", description: `${values.accountName} changes were saved.` });
     setEditingBank(null);
   };
 
-  const handleDelete = () => {
+  const handleEditCashAccount = (values: CashAccountFormValues) => {
+    if (!editingCashAccount) return;
+    const { assetHeadId: _assetHeadId, ...payload } = values;
+    void dispatch(cashAccountFeature.updateOne({ id: editingCashAccount.id, patch: payload as Partial<CashAccount> }) as never);
+    notify({ tone: "success", title: "Cash account updated", description: `${values.userName} changes were saved.` });
+    setEditingCashAccount(null);
+  };
+
+  const handleDeleteBank = () => {
     if (!deletingBank) return;
     void dispatch(bankFeature.deleteOne({ id: deletingBank.id, deletedBy: "TWA Administrator" }) as never);
     notify({ tone: "success", title: "Bank account deleted", description: `${deletingBank.accountName} was soft-deleted.` });
     setDeletingBank(null);
+  };
+
+  const handleDeleteCashAccount = () => {
+    if (!deletingCashAccount) return;
+    void dispatch(cashAccountFeature.deleteOne({ id: deletingCashAccount.id, deletedBy: "TWA Administrator" }) as never);
+    notify({ tone: "success", title: "Cash account deleted", description: `${deletingCashAccount.userName} was soft-deleted.` });
+    setDeletingCashAccount(null);
   };
 
   const accountMasterColumns: ColumnDef<AccountMasterRow>[] = [
@@ -131,15 +172,18 @@ export default function BanksPage() {
       id: "actions",
       header: "Actions",
       cell: ({ row }) => {
-        if (row.original.category !== "Bank") return "-";
-        const bank = row.original.bank;
-
         return (
           <PermissionGuard permission="custody:manage">
             <div className="flex gap-2">
               <button
                 className="grid h-8 w-8 place-items-center rounded border border-slate-200 dark:border-slate-800"
-                onClick={() => setEditingBank(bank)}
+                onClick={() => {
+                  if (row.original.category === "Bank") {
+                    setEditingBank(row.original.bank);
+                    return;
+                  }
+                  setEditingCashAccount(row.original.cashAccount);
+                }}
                 aria-label={`Edit ${row.original.name}`}
                 type="button"
               >
@@ -147,7 +191,13 @@ export default function BanksPage() {
               </button>
               <button
                 className="grid h-8 w-8 place-items-center rounded border border-red-200 text-red-700"
-                onClick={() => setDeletingBank(bank)}
+                onClick={() => {
+                  if (row.original.category === "Bank") {
+                    setDeletingBank(row.original.bank);
+                    return;
+                  }
+                  setDeletingCashAccount(row.original.cashAccount);
+                }}
                 aria-label={`Delete ${row.original.name}`}
                 type="button"
               >
@@ -168,7 +218,7 @@ export default function BanksPage() {
       columns={accountMasterColumns}
       filterSlot={
         <>
-          <SelectFilter label="Type" value={type} onChange={setType} options={["Kuwait Bank", "India Bank"]} />
+          <SelectFilter label="Bank Type" value={type} onChange={setType} options={["Kuwait Bank", "India Bank"]} />
           <SelectFilter label="Currency" value={currency} onChange={setCurrency} options={["KWD", "INR"]} />
           <SelectFilter label="Reconciliation" value={reconciliation} onChange={setReconciliation} options={["Matched", "Pending"]} />
         </>
@@ -225,19 +275,30 @@ export default function BanksPage() {
 
       {isCreatingBank && (
         <Modal title="Create bank account" onClose={() => setIsCreatingBank(false)}>
-          <BankAccountForm onSubmit={handleCreateBank} onCancel={() => setIsCreatingBank(false)} submitLabel="Create" />
+          <BankAccountForm
+            assetAccountHeads={assetHeadOptions}
+            onSubmit={handleCreateBank}
+            onCancel={() => setIsCreatingBank(false)}
+            submitLabel="Create"
+          />
         </Modal>
       )}
 
       {isCreatingCashAccount && (
         <Modal title="Create cash account" onClose={() => setIsCreatingCashAccount(false)}>
-          <CashAccountForm onSubmit={handleCreateCashAccount} onCancel={() => setIsCreatingCashAccount(false)} submitLabel="Create" />
+          <CashAccountForm
+            assetAccountHeads={assetHeadOptions}
+            onSubmit={handleCreateCashAccount}
+            onCancel={() => setIsCreatingCashAccount(false)}
+            submitLabel="Create"
+          />
         </Modal>
       )}
 
       {editingBank && (
         <Modal title={`Edit ${editingBank.accountName}`} onClose={() => setEditingBank(null)}>
           <BankAccountForm
+            assetAccountHeads={assetHeadOptions}
             defaultValues={{
               accountName: editingBank.accountName,
               accountNumber: editingBank.accountNumber,
@@ -255,13 +316,38 @@ export default function BanksPage() {
         </Modal>
       )}
 
+      {editingCashAccount && (
+        <Modal title={`Edit ${editingCashAccount.userName}`} onClose={() => setEditingCashAccount(null)}>
+          <CashAccountForm
+            assetAccountHeads={assetHeadOptions}
+            defaultValues={{
+              userName: editingCashAccount.userName,
+              phoneNumber: editingCashAccount.phoneNumber,
+            }}
+            onSubmit={handleEditCashAccount}
+            onCancel={() => setEditingCashAccount(null)}
+            submitLabel="Save changes"
+          />
+        </Modal>
+      )}
+
       {deletingBank && (
         <ConfirmationDialog
           title={`Delete ${deletingBank.accountName}?`}
           description="This will soft-delete the record from active registers while preserving the audit-ready entity lifecycle."
           confirmLabel="Delete"
           onCancel={() => setDeletingBank(null)}
-          onConfirm={handleDelete}
+          onConfirm={handleDeleteBank}
+        />
+      )}
+
+      {deletingCashAccount && (
+        <ConfirmationDialog
+          title={`Delete ${deletingCashAccount.userName}?`}
+          description="This will soft-delete the cash account master while preserving the audit-ready entity lifecycle."
+          confirmLabel="Delete"
+          onCancel={() => setDeletingCashAccount(null)}
+          onConfirm={handleDeleteCashAccount}
         />
       )}
     </ModulePage>

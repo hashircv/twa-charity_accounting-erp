@@ -10,7 +10,6 @@ import {
   commitmentFeature,
   contributionFeature,
   memberFeature,
-  paymentCategoryFeature,
   paymentFeature,
 } from "@/store/features";
 
@@ -21,7 +20,6 @@ export const store = configureStore({
     collections: collectionFeature.reducer,
     beneficiaries: beneficiaryFeature.reducer,
     payments: paymentFeature.reducer,
-    paymentCategories: paymentCategoryFeature.reducer,
     commitments: commitmentFeature.reducer,
     contributions: contributionFeature.reducer,
     banks: bankFeature.reducer,

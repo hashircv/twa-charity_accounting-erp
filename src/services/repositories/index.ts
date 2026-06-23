@@ -9,7 +9,6 @@ import {
   contributions,
   members,
   payments,
-  paymentCategories,
 } from "@/services/mock/mockData";
 import { MockRepository } from "@/services/repositories/MockRepository";
 
@@ -18,7 +17,6 @@ export const repositories = {
   collections: new MockRepository(collections, "collection"),
   beneficiaries: new MockRepository(beneficiaries, "beneficiary"),
   payments: new MockRepository(payments, "payment"),
-  paymentCategories: new MockRepository(paymentCategories, "payment-category"),
   commitments: new MockRepository(commitments, "commitment"),
   contributions: new MockRepository(contributions, "contribution"),
   banks: new MockRepository(bankAccounts, "bank"),

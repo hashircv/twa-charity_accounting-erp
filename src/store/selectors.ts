@@ -10,7 +10,6 @@ import {
   commitmentFeature,
   contributionFeature,
   memberFeature,
-  paymentCategoryFeature,
   paymentFeature,
 } from "@/store/features";
 
@@ -18,7 +17,6 @@ export const memberSelectors = memberFeature.adapter.getSelectors((state: RootSt
 export const collectionSelectors = collectionFeature.adapter.getSelectors((state: RootState) => state.collections);
 export const beneficiarySelectors = beneficiaryFeature.adapter.getSelectors((state: RootState) => state.beneficiaries);
 export const paymentSelectors = paymentFeature.adapter.getSelectors((state: RootState) => state.payments);
-export const paymentCategorySelectors = paymentCategoryFeature.adapter.getSelectors((state: RootState) => state.paymentCategories);
 export const commitmentSelectors = commitmentFeature.adapter.getSelectors((state: RootState) => state.commitments);
 export const contributionSelectors = contributionFeature.adapter.getSelectors((state: RootState) => state.contributions);
 export const bankSelectors = bankFeature.adapter.getSelectors((state: RootState) => state.banks);

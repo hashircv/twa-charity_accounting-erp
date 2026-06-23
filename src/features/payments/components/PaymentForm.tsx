@@ -4,7 +4,6 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { NumberField, SelectField, TextField } from "@/components/forms/FormField";
 import { Button } from "@/components/ui/Button";
-import { defaultPaymentCategoryNames } from "@/features/paymentCategories/paymentCategoryDefaults";
 
 const paymentSchema = z.object({
   voucherNumber: z.string().min(1, "Voucher number is required"),
@@ -81,7 +80,6 @@ export function PaymentForm({
   const method = watch("method");
   const accountId = watch("accountId");
   const accountOptions = method === "Bank" ? bankAccounts : cashAccounts;
-  const availableCategories = categoryOptions.length ? categoryOptions : defaultPaymentCategoryNames;
 
   useEffect(() => {
     const amount = Number(originalAmount) || 0;
@@ -113,7 +111,8 @@ export function PaymentForm({
         <TextField
           id="voucherNumber"
           label="Voucher Number"
-          placeholder="e.g. VCH-2025-001"
+          placeholder="Auto generated"
+          readOnly
           error={errors.voucherNumber?.message}
           {...register("voucherNumber")}
         />
@@ -152,7 +151,8 @@ export function PaymentForm({
           label="Category"
           placeholder="Select payment category"
           error={errors.category?.message}
-          options={availableCategories.map((category) => ({ value: category, label: category }))}
+          options={categoryOptions.map((category) => ({ value: category, label: category }))}
+          searchable
           {...register("category")}
         />
       </div>
@@ -218,6 +218,7 @@ export function PaymentForm({
           placeholder={`Select ${method === "Bank" ? "bank account" : "cash account"}`}
           error={errors.accountId?.message}
           options={accountOptions.map((account) => ({ value: account.id, label: account.label }))}
+          searchable
           {...register("accountId")}
         />
         <SelectField

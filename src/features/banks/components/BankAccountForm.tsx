@@ -1,10 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { NumberField, SelectField, TextField } from "@/components/forms/FormField";
 import { Button } from "@/components/ui/Button";
 
 const bankAccountSchema = z.object({
+  assetHeadId: z.string().optional(),
   accountName: z.string().min(2, "Account name must be at least 2 characters"),
   accountNumber: z.string().min(4, "Account number must be at least 4 characters"),
   accountType: z.enum(["Kuwait Bank", "India Bank"], { required_error: "Select an account type" }),
@@ -17,21 +19,31 @@ const bankAccountSchema = z.object({
 
 export type BankAccountFormValues = z.infer<typeof bankAccountSchema>;
 
+type AssetAccountHeadOption = {
+  id: string;
+  name: string;
+  code: string;
+};
+
 interface BankAccountFormProps {
+  assetAccountHeads?: AssetAccountHeadOption[];
   defaultValues?: Partial<BankAccountFormValues>;
   onSubmit: (values: BankAccountFormValues) => void;
   onCancel: () => void;
   submitLabel?: string;
 }
 
-export function BankAccountForm({ defaultValues, onSubmit, onCancel, submitLabel = "Save" }: BankAccountFormProps) {
+export function BankAccountForm({ assetAccountHeads = [], defaultValues, onSubmit, onCancel, submitLabel = "Save" }: BankAccountFormProps) {
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<BankAccountFormValues>({
     resolver: zodResolver(bankAccountSchema),
     defaultValues: {
+      assetHeadId: "",
       accountName: "",
       accountNumber: "",
       accountType: undefined,
@@ -43,13 +55,31 @@ export function BankAccountForm({ defaultValues, onSubmit, onCancel, submitLabel
       ...defaultValues,
     },
   });
+  const selectedAssetHeadId = watch("assetHeadId");
+
+  useEffect(() => {
+    const selectedHead = assetAccountHeads.find((head) => head.id === selectedAssetHeadId);
+    if (!selectedHead) return;
+    setValue("accountName", selectedHead.name, { shouldDirty: true, shouldValidate: true });
+    setValue("accountNumber", selectedHead.code, { shouldDirty: true, shouldValidate: true });
+  }, [assetAccountHeads, selectedAssetHeadId, setValue]);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <SelectField
+        id="assetHeadId"
+        label="Asset Account Head"
+        placeholder="Select asset head"
+        error={errors.assetHeadId?.message}
+        searchable
+        options={assetAccountHeads.map((head) => ({ value: head.id, label: `${head.code} / ${head.name}` }))}
+        {...register("assetHeadId")}
+      />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <TextField
           id="accountName"
-          label="Account Name"
+          label="Bank Name"
           placeholder="e.g. TWA Main Account"
           error={errors.accountName?.message}
           {...register("accountName")}
