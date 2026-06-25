@@ -14,10 +14,8 @@ import { PermissionGuard } from "@/app/guards/PermissionGuard";
 import { bankFeature, cashAccountFeature, collectionFeature } from "@/store/features";
 import { useAppDispatch, useAppSelector } from "@/hooks/redux";
 import { bankSelectors, cashAccountSelectors, collectionSelectors, memberSelectors } from "@/store/selectors";
-import type { Collection, Currency } from "@/types/domain";
+import type { Collection, Currency, Money } from "@/types/domain";
 import { formatCurrency } from "@/utils/currency";
-import { convertCurrency } from "@/utils/currency";
-import { exchangeRates } from "@/services/mock/mockData";
 import type { CollectionFormValues } from "@/features/collections/schemas/collectionSchema";
 import {
   accountingStorageKey,
@@ -199,7 +197,12 @@ export default function CollectionsPage() {
   };
 
   const saveCollection = (values: CollectionFormValues) => {
-    const amount = convertCurrency(values.amount, values.currency, values.date, exchangeRates);
+    const amount: Money = {
+      originalAmount: values.kwdAmount > 0 ? values.kwdAmount : values.inrAmount,
+      currency: values.kwdAmount > 0 ? "KWD" : "INR",
+      exchangeRate: values.kwdAmount > 0 && values.inrAmount > 0 ? Number((values.inrAmount / values.kwdAmount).toFixed(4)) : 1,
+      convertedAmount: values.inrAmount,
+    };
     const accountName = getSelectedAccountName(values);
     if (editing) {
       const updatedCollection: Collection = {
@@ -381,6 +384,8 @@ export default function CollectionsPage() {
                       donorName: editing.donorName,
                       donorContact: editing.donorContact,
                       amount: editing.amount.originalAmount,
+                      kwdAmount: editing.amount.currency === "KWD" ? editing.amount.originalAmount : 0,
+                      inrAmount: editing.amount.convertedAmount,
                       currency: editing.amount.currency,
                       category: editing.category,
                       collectedBy: editing.collectedBy,
@@ -396,6 +401,8 @@ export default function CollectionsPage() {
                         donorName: receiptDraft.memberName,
                         donorContact: receiptDraft.memberContact,
                         amount: receiptDraft.amount,
+                        kwdAmount: 0,
+                        inrAmount: receiptDraft.amount,
                         currency: "INR" as Currency,
                         category: normalizeIncomeAccountCategory(receiptDraft.category, categoryOptions) || categoryOptions[0] || "",
                         collectedBy: "TWA Administrator",
