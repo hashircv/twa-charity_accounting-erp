@@ -29,6 +29,9 @@ export function CollectionForm({
     defaultValues: {
       date: new Date().toISOString().slice(0, 10),
       currency: "KWD",
+      amount: 0,
+      kwdAmount: 0,
+      inrAmount: 0,
       method: "Cash",
       category: categoryOptions[0] ?? "",
       collectedBy: "TWA Administrator",
@@ -40,6 +43,8 @@ export function CollectionForm({
   });
   const accountType = watch("accountType");
   const donorName = watch("donorName");
+  const kwdAmount = watch("kwdAmount");
+  const inrAmount = watch("inrAmount");
   const accountOptions = accountType === "Bank" ? bankAccounts : cashAccounts;
   const [isDonorOpen, setIsDonorOpen] = useState(false);
   const donorNameField = register("donorName");
@@ -53,6 +58,13 @@ export function CollectionForm({
     setValue("donorContact", selectedMember.contactNumber, { shouldValidate: true, shouldDirty: true });
   }, [donorName, members, setValue]);
 
+  useEffect(() => {
+    const kwd = Number(kwdAmount) || 0;
+    const inr = Number(inrAmount) || 0;
+    setValue("currency", kwd > 0 ? "KWD" : "INR", { shouldValidate: true, shouldDirty: true });
+    setValue("amount", kwd > 0 ? kwd : inr, { shouldValidate: true, shouldDirty: true });
+  }, [inrAmount, kwdAmount, setValue]);
+
   return (
     <form
       className="grid gap-3 md:grid-cols-2"
@@ -61,6 +73,9 @@ export function CollectionForm({
         reset({
           date: new Date().toISOString().slice(0, 10),
           currency: "KWD",
+          amount: 0,
+          kwdAmount: 0,
+          inrAmount: 0,
           method: "Cash",
           category: categoryOptions[0] ?? "",
           collectedBy: "TWA Administrator",
@@ -117,17 +132,8 @@ export function CollectionForm({
         )}
       </div>
       <TextField id="donorContact" label="Donor Contact" placeholder="Donor contact" error={formState.errors.donorContact?.message} {...register("donorContact")} />
-      <SelectField
-        id="currency"
-        label="Currency"
-        options={[
-          { value: "KWD", label: "KWD" },
-          { value: "INR", label: "INR" },
-        ]}
-        error={formState.errors.currency?.message}
-        {...register("currency")}
-      />
-      <NumberField id="amount" label="Amount" step="0.001" placeholder="Amount" error={formState.errors.amount?.message} {...register("amount")} />
+      <NumberField id="kwdAmount" label="KWD Amount" step="0.001" placeholder="KWD amount" error={formState.errors.kwdAmount?.message} {...register("kwdAmount")} />
+      <NumberField id="inrAmount" label="INR Amount" step="0.001" placeholder="INR amount" error={formState.errors.inrAmount?.message} {...register("inrAmount")} />
       <SelectField
         id="category"
         label="Collection Category"

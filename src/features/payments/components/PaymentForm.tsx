@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { NumberField, SelectField, TextField } from "@/components/forms/FormField";
@@ -62,7 +62,7 @@ export function PaymentForm({
       beneficiaryId: "",
       beneficiaryName: "",
       category: "",
-      amount: { originalAmount: 0, currency: undefined, exchangeRate: 1, convertedAmount: 0 },
+      amount: { originalAmount: 0, currency: "INR", exchangeRate: 1, convertedAmount: 0 },
       method: undefined,
       accountId: "",
       approvedBy: "",
@@ -72,24 +72,21 @@ export function PaymentForm({
       ...defaultValues,
     },
   });
-  const originalAmount = watch("amount.originalAmount");
-  const exchangeRate = watch("amount.exchangeRate");
-  const currency = watch("amount.currency");
-  const convertedAmount = watch("amount.convertedAmount");
+  const [kwdAmount, setKwdAmount] = useState(defaultValues?.amount?.currency === "KWD" ? defaultValues.amount.originalAmount : 0);
+  const [inrAmount, setInrAmount] = useState(defaultValues?.amount?.convertedAmount ?? 0);
   const beneficiaryId = watch("beneficiaryId");
   const method = watch("method");
   const accountId = watch("accountId");
   const accountOptions = method === "Bank" ? bankAccounts : cashAccounts;
 
   useEffect(() => {
-    const amount = Number(originalAmount) || 0;
-    const rate = currency === "INR" ? 1 : Number(exchangeRate) || 0;
-    const nextConvertedAmount = Number((amount * rate).toFixed(3));
-    setValue("amount.convertedAmount", nextConvertedAmount, { shouldValidate: true, shouldDirty: true });
-    if (currency === "INR" && Number(exchangeRate) !== 1) {
-      setValue("amount.exchangeRate", 1, { shouldValidate: true, shouldDirty: true });
-    }
-  }, [currency, exchangeRate, originalAmount, setValue]);
+    const kwd = Number(kwdAmount) || 0;
+    const inr = Number(inrAmount) || 0;
+    setValue("amount.currency", kwd > 0 ? "KWD" : "INR", { shouldValidate: true, shouldDirty: true });
+    setValue("amount.originalAmount", kwd > 0 ? kwd : inr, { shouldValidate: true, shouldDirty: true });
+    setValue("amount.convertedAmount", inr, { shouldValidate: true, shouldDirty: true });
+    setValue("amount.exchangeRate", kwd > 0 && inr > 0 ? Number((inr / kwd).toFixed(4)) : 1, { shouldValidate: true, shouldDirty: true });
+  }, [inrAmount, kwdAmount, setValue]);
 
   useEffect(() => {
     if (!method) return;
@@ -108,21 +105,8 @@ export function PaymentForm({
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <TextField
-          id="voucherNumber"
-          label="Voucher Number"
-          placeholder="Auto generated"
-          readOnly
-          error={errors.voucherNumber?.message}
-          {...register("voucherNumber")}
-        />
-        <TextField
-          id="date"
-          label="Date"
-          type="date"
-          error={errors.date?.message}
-          {...register("date")}
-        />
+        <TextField id="voucherNumber" label="Voucher Number" placeholder="Auto generated" readOnly error={errors.voucherNumber?.message} {...register("voucherNumber")} />
+        <TextField id="date" label="Date" type="date" error={errors.date?.message} {...register("date")} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -135,14 +119,7 @@ export function PaymentForm({
           searchable
           {...register("beneficiaryId")}
         />
-        <TextField
-          id="beneficiaryName"
-          label="Beneficiary Name"
-          placeholder="Fetched from beneficiary master"
-          readOnly
-          error={errors.beneficiaryName?.message}
-          {...register("beneficiaryName")}
-        />
+        <TextField id="beneficiaryName" label="Beneficiary Name" placeholder="Fetched from beneficiary master" readOnly error={errors.beneficiaryName?.message} {...register("beneficiaryName")} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -157,46 +134,11 @@ export function PaymentForm({
         />
       </div>
 
-      {/* Amount section */}
       <fieldset className="space-y-3 rounded border border-slate-200 p-3 dark:border-slate-800">
         <legend className="px-1 text-xs font-medium text-slate-600 dark:text-slate-400">Amount Details</legend>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <NumberField
-            id="originalAmount"
-            label="Original Amount"
-            step="0.001"
-            error={errors.amount?.originalAmount?.message}
-            {...register("amount.originalAmount")}
-          />
-          <SelectField
-            id="amountCurrency"
-            label="Currency"
-            placeholder="Select currency"
-            error={errors.amount?.currency?.message}
-            options={[
-              { value: "KWD", label: "KWD — Kuwaiti Dinar" },
-              { value: "INR", label: "INR — Indian Rupee" },
-            ]}
-            {...register("amount.currency")}
-          />
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <NumberField
-            id="exchangeRate"
-            label="Exchange Rate"
-            step="0.0001"
-            error={errors.amount?.exchangeRate?.message}
-            {...register("amount.exchangeRate")}
-          />
-          <NumberField
-            id="convertedAmount"
-            label="Converted Amount (INR)"
-            step="0.001"
-            value={Number.isFinite(Number(convertedAmount)) ? convertedAmount : 0}
-            readOnly
-            error={errors.amount?.convertedAmount?.message}
-            {...register("amount.convertedAmount")}
-          />
+          <NumberField id="kwdAmount" label="KWD Amount" step="0.001" value={kwdAmount} onChange={(event) => setKwdAmount(Number(event.target.value) || 0)} />
+          <NumberField id="inrAmount" label="INR Amount" step="0.001" value={inrAmount} error={errors.amount?.convertedAmount?.message} onChange={(event) => setInrAmount(Number(event.target.value) || 0)} />
         </div>
       </fieldset>
 
@@ -233,30 +175,11 @@ export function PaymentForm({
           ]}
           {...register("status")}
         />
-        <TextField
-          id="approvedBy"
-          label="Approved By"
-          placeholder="e.g. President"
-          error={errors.approvedBy?.message}
-          {...register("approvedBy")}
-        />
+        <TextField id="approvedBy" label="Approved By" placeholder="e.g. President" error={errors.approvedBy?.message} {...register("approvedBy")} />
       </div>
 
-      <TextField
-        id="paidBy"
-        label="Paid By"
-        placeholder="e.g. Treasurer"
-        error={errors.paidBy?.message}
-        {...register("paidBy")}
-      />
-
-      <TextField
-        id="narration"
-        label="Narration"
-        placeholder="Optional notes about this payment"
-        error={errors.narration?.message}
-        {...register("narration")}
-      />
+      <TextField id="paidBy" label="Paid By" placeholder="e.g. Treasurer" error={errors.paidBy?.message} {...register("paidBy")} />
+      <TextField id="narration" label="Narration" placeholder="Optional notes about this payment" error={errors.narration?.message} {...register("narration")} />
 
       <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
         <Button className="bg-slate-600 hover:bg-slate-700" onClick={onCancel} type="button">
